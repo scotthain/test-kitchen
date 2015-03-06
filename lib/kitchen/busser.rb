@@ -104,17 +104,34 @@ module Kitchen
       gem     = sudo("#{config[:ruby_bindir]}/gem")
       busser  = sudo(config[:busser_bin])
 
-      cmd = <<-CMD.gsub(/^ {8}/, "")
-        #{busser_setup_env}
-        gem_bindir=`#{ruby} -rrubygems -e "puts Gem.bindir"`
 
-        if ! #{gem} list busser -i >/dev/null; then
-          #{gem} install #{gem_install_args}
-        fi
-        #{sudo("${gem_bindir}")}/busser setup
-        #{busser} plugin install #{plugins.join(" ")}
+      cmd = <<-CMD.gsub(/^ {8}/, "")
+      #{busser_setup_env}
+      if [ ! -d #{config[:root_path]} ]; then
+        mkdir #{config[:root_path]}
+      fi
+      echo source \"https://rubygems.org\" > #{config[:root_path]}/Gemfile
       CMD
       Util.wrap_command(cmd)
+
+      puts "CMD: "+ cmd
+      cmd
+
+      # cmd = <<-CMD.gsub(/^ {8}/, "")
+      #   #{busser_setup_env}
+      #   gem_bindir=`#{ruby} -rrubygems -e "puts Gem.bindir"`
+      #
+      #   busser_installed=`#{gem} list busser -i`
+      #
+      #   if [ "$busser_installed" -eq "false" ]; then
+      #     #{gem} install #{gem_install_args}
+      #   fi
+      #   #{sudo("${gem_bindir}")}/busser setup
+      #   #{busser} plugin install #{plugins.join(" ")}
+      # CMD
+      # Util.wrap_command(cmd)
+
+
     end
 
     # Returns a command string which transfers all suite test files to the
