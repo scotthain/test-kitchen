@@ -18,6 +18,7 @@
 
 require "base64"
 require "digest"
+require 'shellwords'
 
 module Kitchen
 
@@ -50,6 +51,9 @@ module Kitchen
       @config[:kitchen_root] = kitchen_root
       @config[:test_base_path] = File.expand_path(test_base_path, kitchen_root)
       @config[:suite_name] = suite_name
+      @config[:busser_source] = opts.fetch(:busser_source, "gem")
+      @config[:busser_url] = opts.fetch(:busser_url, "https://rubygems.org")
+      @config[:busser_version] = opts.fetch(:busser_version, nil)
       @config[:sudo] = opts.fetch(:sudo, true)
       @config[:sudo_command] = opts.fetch(:sudo_command, "sudo -E")
       @config[:ruby_bindir] = opts.fetch(:ruby_bindir, DEFAULT_RUBY_BINDIR)
@@ -102,34 +106,71 @@ module Kitchen
 
       ruby    = "#{config[:ruby_bindir]}/ruby"
       gem     = sudo("#{config[:ruby_bindir]}/gem")
+      bundle     = sudo("#{config[:ruby_bindir]}/bundle")
       busser  = sudo(config[:busser_bin])
 
+      busser_source = config[:busser_source]
+      busser_url = config[:busser_url]
+      busser_version = config[:busser_version]
+      version_string = nil
+      source_string = nil
+      busser_setup_string = "gem 'busser'"
 
-      # cmd = <<-CMD.gsub(/^ {8}/, "")
-      # #{busser_setup_env}
-      # if [ ! -d #{config[:root_path]} ]; then
-      #   mkdir #{config[:root_path]}
-      # fi
-      # echo source \"https://rubygems.org\" > #{config[:root_path]}/Gemfile
-      # CMD
-      # Util.wrap_command(cmd)
-      #
-      # puts "CMD: "+ cmd
-      # cmd
+      case busser_source
+      when 'git'
+        puts "Pulling from git source"
+        busser_setup_string << ", :git => '#{busser_url}'"
+        unless busser_version.nil?
+          busser_setup_string << ", :branch => '#{busser_version}'"
+        end
+      when 'gem'
+        puts "Pulling gem source"
+        unless busser_version.nil?
+          busser_setup_string << ", '#{busser_version}'"
+        end
+        busser_setup_string << ", :source => '#{busser_url}'"
+      else
+        puts "How did you get here??"
+      end
+      busser_setup_string = Shellwords.escape(busser_setup_string)
+
 
       cmd = <<-CMD.gsub(/^ {8}/, "")
-        #{busser_setup_env}
-        gem_bindir=`#{ruby} -rrubygems -e "puts Gem.bindir"`
+      #{busser_setup_env}
 
-        busser_installed=`#{gem} list busser -i`
+      if [ ! -d /tmp/busser_setup ]; then
+        mkdir /tmp/busser_setup
+      fi
 
-        if [ "$busser_installed" -eq "false" ]; then
-          #{gem} install #{gem_install_args}
-        fi
-        #{sudo("${gem_bindir}")}/busser setup
-        #{busser} plugin install #{plugins.join(" ")}
+      echo #{busser_setup_string} > /tmp/busser_setup/Gemfile
+      #{bundle} install --quiet --gemfile /tmp/busser_setup/Gemfile --path #{config[:root_path]}/gems --shebang #{ruby} --binstubs #{config[:root_path]}
+      #{sudo(config[:root_path])}/busser setup
+      #{busser} plugin install #{plugins.join(" ")}
       CMD
       Util.wrap_command(cmd)
+
+      # cmd = <<-CMD.gsub(/^ {8}/, "")
+      # echo source \\\"https://rubygems.org\\\" > #{config[:root_path]}/Gemfile
+      # echo gem \\\"busser\\\" >> #{config[:root_path]}/Gemfile
+      # CMD
+      # Util.wrap_command(cmd)
+
+
+      cmd
+
+      # cmd = <<-CMD.gsub(/^ {8}/, "")
+      #   #{busser_setup_env}
+      #   gem_bindir=`#{ruby} -rrubygems -e "puts Gem.bindir"`
+      #
+      #   busser_installed=`#{gem} list busser -i`
+      #
+      #   if [ "$busser_installed" -eq "false" ]; then
+      #     #{gem} install #{gem_install_args}
+      #   fi
+      #   #{sudo("${gem_bindir}")}/busser setup
+      #   #{busser} plugin install #{plugins.join(" ")}
+      # CMD
+      # Util.wrap_command(cmd)
 
 
     end
@@ -311,10 +352,11 @@ module Kitchen
     def busser_setup_env
       [
         %{BUSSER_ROOT="#{config[:root_path]}"},
-        %{GEM_HOME="#{config[:root_path]}/gems"},
-        %{GEM_PATH="#{config[:root_path]}/gems"},
-        %{GEM_CACHE="#{config[:root_path]}/gems/cache"},
-        %{\nexport BUSSER_ROOT GEM_HOME GEM_PATH GEM_CACHE}
+#        %{GEM_HOME="#{config[:root_path]}/gems"},
+#        %{GEM_PATH="#{config[:root_path]}/gems"},
+#        %{GEM_CACHE="#{config[:root_path]}/gems/cache"},
+#        %{\nexport BUSSER_ROOT GEM_HOME GEM_PATH GEM_CACHE}
+        %{\nexport BUSSER_ROOT}
       ].join(" ")
     end
 
