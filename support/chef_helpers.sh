@@ -1,5 +1,3 @@
-set -x
-
 # @param $1 the omnibus root directory
 # @param $2 the requested version of omnibus package
 # @return 0 if omnibus needs to be installed, non-zero otherwise
